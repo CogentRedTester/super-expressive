@@ -93,6 +93,8 @@ const t = {
   capture: deferredType('capture', { containsChildren: true }),
   subexpression: asType('subexpression', { containsChildren: true, quantifierRequiresGroup: true }),
   namedCapture: name => deferredType('namedCapture', { name, containsChildren: true }),
+  class: deferredType('class', { containsChildren: true }),
+  negatedClass: deferredType('negatedClass', { containsChildren: true }),
   group: deferredType('group', { containsChildren: true }),
   anyOf: deferredType('anyOf', { containsChildren: true }),
   assertAhead: deferredType('assertAhead', { containsChildren: true }),
@@ -126,7 +128,7 @@ const fuseElements = elements => {
   return [fused, rest];
 }
 
-const createStackFrame = type => ({ type, quantifier: null, elements: [] });
+const createStackFrame = type => ({ type, quantifier: null, class: null, elements: [] });
 
 // Symbols are used to create private methods
 const clone = Symbol('clone');
@@ -197,6 +199,10 @@ class SuperExpressive {
   }
 
   [matchElement](typeFn) {
+    assert(
+      !(this[getCurrentFrame]().class && !typeFn.classCompatible),
+      `cannot use ${typeFn.type} in a character class`
+    );
     const next = this[clone]();
     next[getCurrentElementArray]().push(next[applyQuantifier](typeFn));
     return next;
@@ -235,12 +241,19 @@ class SuperExpressive {
   }
 
   [frameCreatingElement](typeFn) {
+    assert(!this[getCurrentFrame]().class, `cannot use ${typeFn.type} in a character class`);
+
     const next = this[clone]();
     const newFrame = createStackFrame(typeFn);
+    if (typeFn.type === 'class' || typeFn.type === 'negatedClass') {
+      newFrame.class = true;
+    }
     next.state.stack.push(newFrame);
     return next;
   }
 
+  get class() { return this[frameCreatingElement](t.class) };
+  get negatedClass() { return this[frameCreatingElement](t.negatedClass) };
   get anyOf() { return this[frameCreatingElement](t.anyOf); }
   get group() { return this[frameCreatingElement](t.group); }
   get assertAhead() { return this[frameCreatingElement](t.assertAhead); }
@@ -275,6 +288,8 @@ class SuperExpressive {
   }
 
   [quantifierElement](typeFnName) {
+    assert(!this[getCurrentFrame]().class, `cannot quantify contents of a character class`);
+
     const next = this[clone]();
     const currentFrame = next[getCurrentFrame]();
     if (currentFrame.quantifier) {
@@ -291,6 +306,7 @@ class SuperExpressive {
   get oneOrMoreLazy() { return this[quantifierElement]('oneOrMoreLazy'); }
 
   exactly(n) {
+    assert(!this[getCurrentFrame]().class, `cannot quantify contents of a character class`);
     assert(Number.isInteger(n) && n > 0, `n must be a positive integer (got ${n})`);
 
     const next = this[clone]();
@@ -303,6 +319,7 @@ class SuperExpressive {
   }
 
   atLeast(n) {
+    assert(!this[getCurrentFrame]().class, `cannot quantify contents of a character class`);
     assert(Number.isInteger(n) && n > 0, `n must be a positive integer (got ${n})`);
 
     const next = this[clone]();
@@ -315,6 +332,7 @@ class SuperExpressive {
   }
 
   between(x, y) {
+    assert(!this[getCurrentFrame]().class, `cannot quantify contents of a character class`);
     assert(Number.isInteger(x) && x >= 0, `x must be an integer (got ${x})`);
     assert(Number.isInteger(y) && y > 0, `y must be an integer greater than 0 (got ${y})`);
     assert(x < y, `x must be less than y (x = ${x}, y = ${y})`);
@@ -329,6 +347,7 @@ class SuperExpressive {
   }
 
   betweenLazy(x, y) {
+    assert(!this[getCurrentFrame]().class, `cannot quantify contents of a character class`);
     assert(Number.isInteger(x) && x >= 0, `x must be an integer (got ${x})`);
     assert(Number.isInteger(y) && y > 0, `y must be an integer greater than 0 (got ${y})`);
     assert(x < y, `x must be less than y (x = ${x}, y = ${y})`);
@@ -343,6 +362,7 @@ class SuperExpressive {
   }
 
   get startOfInput() {
+    assert(!this[getCurrentFrame]().class, `cannot use positions in a character class`);
     assert(!this.state.hasDefinedStart, 'This regex already has a defined start of input');
     assert(!this.state.hasDefinedEnd, 'Cannot define the start of input after the end of input');
 
@@ -353,6 +373,7 @@ class SuperExpressive {
   }
 
   get endOfInput() {
+    assert(!this[getCurrentFrame]().class, `cannot use positions in a character class.`);
     assert(!this.state.hasDefinedEnd, 'This regex already has a defined end of input');
 
     const next = this[clone]();
@@ -383,6 +404,7 @@ class SuperExpressive {
   }
 
   anythingButString(str) {
+    assert(!this[getCurrentFrame]().class, `cannot have strings in a character class`);
     assert(typeof str === 'string', `str must be a string (got ${str})`);
     assert(str.length > 0, `str must have least one character`);
 
@@ -395,6 +417,11 @@ class SuperExpressive {
   }
 
   anythingButChars(chars) {
+    assert(
+      !this[getCurrentFrame]().class,
+      `cannot have negated characters in a character class. ` +
+      `Use andOfChars in a negatedClass.`
+    );
     assert(typeof chars === 'string', `chars must be a string (got ${chars})`);
     assert(chars.length > 0, `chars must have at least one character`);
 
@@ -407,6 +434,11 @@ class SuperExpressive {
   }
 
   anythingButRange(a, b) {
+    assert(
+      !this[getCurrentFrame]().class,
+      `Cannot have negated ranges in a character class. ` +
+      `Use range in a negatedClass.`
+    );
     const strA = a.toString();
     const strB = b.toString();
 
@@ -423,6 +455,7 @@ class SuperExpressive {
   }
 
   string(s) {
+    assert(!this[getCurrentFrame]().class, `cannot have strings in a character class`);
     assert(typeof s === 'string', `s must be a string (got ${s})`);
     assert(s.length > 0, `s cannot be an empty string`);
 
@@ -551,6 +584,7 @@ class SuperExpressive {
       'Cannot call subexpression with a not yet fully specified regex object.' +
       `\n(Try adding a .end() call to match the "${expr[getCurrentFrame]().type.type}" on the subexpression)\n`
     );
+    assert(!this[getCurrentFrame]().class, `cannot add subexpressions to a character class`);
 
     const options = applySubexpressionDefaults(opts);
 
@@ -719,6 +753,16 @@ class SuperExpressive {
         const evaluatedRest = rest.map(SuperExpressive[evaluate]);
         const separator = (evaluatedRest.length > 0 && fused.length > 0) ? '|' : '';
         return `(?:${evaluatedRest.join('|')}${separator}${fused ? `[${fused}]` : ''})`;
+      }
+
+      case 'class': {
+        const [fused] = fuseElements(el.value);
+        return `[${fused}]`;
+      }
+
+      case 'negatedClass': {
+        const [fused] = fuseElements(el.value);
+        return `[^${fused}]`;
       }
 
       case 'capture': {

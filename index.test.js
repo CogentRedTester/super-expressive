@@ -452,3 +452,118 @@ describe('subexpressions', () => {
       .range('0', '9')
   );
 });
+
+describe('classes', () => {
+  testRegexEquality(
+    'empty class',
+    /[]/,
+    SuperExpressive()
+      .class
+      .end()
+  );
+
+  testRegexEquality(
+    'empty negated class',
+    /[^]/,
+    SuperExpressive()
+      .negatedClass
+      .end()
+  );
+
+  testRegexEquality(
+    'class with digits',
+    /[\d]/,
+    SuperExpressive()
+      .class
+        .digit
+      .end()
+  );
+
+  testRegexEquality(
+    'class with digits and whitespace',
+    /[\d\s]/,
+    SuperExpressive()
+      .class
+        .digit
+        .whitespaceChar
+      .end()
+  );
+
+  testErrorConditition(
+    'class with invalid character classes',
+    'cannot use anyChar in a character class',
+    () => SuperExpressive()
+      .class
+        .anyChar
+        .word
+      .end()
+  );
+
+  testErrorConditition(
+    'class with invalid frame creating elements',
+    'cannot use group in a character class',
+    () => SuperExpressive()
+      .class
+        .group
+        .end()
+      .end()
+  );
+
+  testRegexEquality(
+    'place range into a class',
+    /[a-zA-Z0-9]/,
+    SuperExpressive()
+      .class
+        .range('a','z')
+        .range('A','Z')
+        .range('0','9')
+      .end()
+  );
+
+  testRegexEquality(
+    'place range into a negated class',
+    /[^a-zA-Z0-9]/,
+    SuperExpressive()
+      .negatedClass
+        .range('a','z')
+        .range('A','Z')
+        .range('0','9')
+      .end()
+  );
+
+  testRegexEquality(
+    'place characters into a negated class',
+    /[^ab\-_\n\s]/,
+    SuperExpressive()
+      .negatedClass
+        .anyOfChars('ab-_')
+        .newline
+        .whitespaceChar
+      .end()
+  );
+
+  const simpleSubExpression = SuperExpressive()
+    .string('hello')
+    .anyChar
+    .string('world');
+
+  testErrorConditition(
+    'subexpresion in a character class',
+    'cannot add subexpressions to a character class',
+    () => {
+      SuperExpressive()
+        .class
+          .subexpression(simpleSubExpression)
+        .end()
+    }
+  );
+
+    testErrorConditition(
+      'class with negative range throws error',
+      'Cannot have negated ranges in a character class. Use range in a negatedClass.',
+      () => SuperExpressive()
+        .class
+          .anythingButRange('a','z')
+        .end()
+    );
+});
