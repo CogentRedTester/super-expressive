@@ -57,6 +57,7 @@
   - [.oneOrMoreLazy](#oneOrMoreLazy)
   - [.exactly(n)](#exactlyn)
   - [.atLeast(n)](#atLeastn)
+  - [.atLeastLazy(n)](#atLeastLazyn)
   - [.between(x, y)](#betweenx-y)
   - [.betweenLazy(x, y)](#betweenLazyx-y)
   - [.startOfInput](#startOfInput)
@@ -748,6 +749,19 @@ SuperExpressive()
   .toRegex();
 // ->
 /\d{5,}/
+```
+
+### .atLeastLazy(n)
+
+Assert that the proceeding element will be matched at least `n` times, but as few times as possible.
+
+**Example**
+```JavaScript
+SuperExpressive()
+  .atLeastLazy(5).digit
+  .toRegex();
+// ->
+/\d{5,}?/
 ```
 
 ### .between(x, y)
